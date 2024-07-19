@@ -127,3 +127,94 @@ function get_custom_category_field($object) {
     // Return the custom field value
     return get_term_meta($term_id, 'name_en', true);
 }
+
+// post tags
+
+function add_tags_to_rest_response() {
+    register_rest_field(
+        'post', // The post type to which we are adding the field
+        'tags', // The name of the new field
+        array(
+            'get_callback'    => 'get_post_tags', // The callback function that retrieves the field value
+            'schema'          => null,
+        )
+    );
+}
+
+function get_post_tags($object, $field_name, $request) {
+    $tags = wp_get_post_tags($object['id']); // Get the tags for the post
+    if (empty($tags)) {
+        return [];
+    }
+    return $tags;
+}
+
+// Hook into the REST API
+add_action('rest_api_init', 'add_tags_to_rest_response');
+
+///  Careers
+function wporg_careers_post_type() {
+	register_post_type('wporg_career_posts',
+		array(
+            'supports' => array('title', 'editor', 'excerpt', 'author', 'thumbnail', 'revisions', 'custom-fields','tags'),
+
+			'labels'      => array(
+				'name'          => __('招聘', 'textdomain'),
+				'singular_name' => __('招聘', 'textdomain'),
+			),
+            'taxonomies' => array('post_tag'), // Add tag support
+				'public'      => true,
+
+				'has_archive' => true,
+                'menu_position' => 5,
+                'rewrite' => array('slug' => 'careers'), // Custom rewrite settings
+                'show_in_rest' => true, // Ensure the post type is accessible via the REST API
+                'rest_base' => 'careers', // Optional: customize the REST API base route
+                'rest_controller_class' => 'WP_REST_Posts_Controller', // Use the default REST controller
+		)
+	);
+
+}
+add_action('init', 'wporg_careers_post_type');
+
+
+function register_careers_tag_endpoint() {
+    register_rest_route('custom/v1', '/career-tags', array(
+        'methods' => 'GET',
+        'callback' => 'get_career_tags',
+        'permission_callback' => function () {
+      return true;
+    }
+
+    )
+
+);
+
+}
+add_action('rest_api_init', 'register_careers_tag_endpoint');
+
+function get_career_tags() {
+    $tags_query = new WP_Term_Query(array(
+        'taxonomy' => 'post_tag',
+        'object_ids' => get_posts(array(
+            'post_type' => 'wporg_career_posts',
+            'fields' => 'ids',
+            'posts_per_page' => -1,
+        )),
+    ));
+
+    $tags = $tags_query->get_terms();
+
+    $formatted_tags = array_map(function ($tag) {
+        return array(
+            'id' => $tag->term_id,
+            'name' => $tag->name,
+            'slug' => $tag->slug,
+            // Add more fields if needed
+        );
+    }, $tags);
+
+    return rest_ensure_response($formatted_tags);
+}
+
+
